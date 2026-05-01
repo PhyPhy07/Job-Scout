@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Job Scout</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0e0e10;
+      --surface: #18181b;
+      --surface2: #222226;
+      --border: #2e2e34;
+      --accent: #f5c518;
+      --accent-dim: rgba(245, 197, 24, 0.12);
+      --text: #f4f4f5;
+      --muted: #71717a;
+      --good: #4ade80;
+      --bad: #f87171;
+      --warn: #fb923c;
+      --info: #60a5fa;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 420px;
+      min-height: 200px;
+      max-height: 600px;
+      overflow-y: auto;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* Scrollbar */
+    body::-webkit-scrollbar { width: 4px; }
+    body::-webkit-scrollbar-track { background: var(--bg); }
+    body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Header */
+    .header {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 10;
+    }
+
+    .logo {
+      font-family: 'DM Serif Display', serif;
+      font-size: 18px;
+      color: var(--accent);
+      letter-spacing: -0.3px;
+    }
+
+    .logo span {
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      font-weight: 400;
+      margin-left: 6px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    /* Company pill */
+    .company-bar {
+      padding: 10px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .company-name {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--accent);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .job-title-small {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 160px;
+    }
+
+    /* Main content area */
+    .content {
+      padding: 16px;
+    }
+
+    /* Idle state */
+    .idle-state {
+      text-align: center;
+      padding: 32px 16px;
+    }
+
+    .idle-icon {
+      font-size: 36px;
+      margin-bottom: 12px;
+    }
+
+    .idle-state h2 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 17px;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .idle-state p {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    /* Scout button */
+    .scout-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 11px 16px;
+      background: var(--accent);
+      color: #0e0e10;
+      border: none;
+      border-radius: 6px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      margin-top: 16px;
+    }
+
+    .scout-btn:hover { opacity: 0.9; }
+    .scout-btn:active { transform: scale(0.98); }
+    .scout-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    /* Loading */
+    .loading-state {
+      text-align: center;
+      padding: 32px 16px;
+    }
+
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 14px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-state p {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .loading-state .loading-step {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--accent);
+      margin-top: 6px;
+      min-height: 16px;
+    }
+
+    /* Results */
+    .section {
+      margin-bottom: 14px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .section-icon {
+      font-size: 14px;
+    }
+
+    .section-title {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+    }
+
+    .section-body {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: var(--text);
+    }
+
+    .section-body.good { border-left: 3px solid var(--good); }
+    .section-body.bad { border-left: 3px solid var(--bad); }
+    .section-body.warn { border-left: 3px solid var(--warn); }
+    .section-body.info { border-left: 3px solid var(--info); }
+
+    /* Bullet items */
+    .bullet-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .bullet-list li {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .bullet-list li::before {
+      content: '—';
+      color: var(--muted);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* Verdict badge */
+    .verdict {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    .verdict.apply { background: rgba(74, 222, 128, 0.12); color: var(--good); border: 1px solid rgba(74, 222, 128, 0.25); }
+    .verdict.caution { background: rgba(251, 146, 60, 0.12); color: var(--warn); border: 1px solid rgba(251, 146, 60, 0.25); }
+    .verdict.pass { background: rgba(248, 113, 113, 0.12); color: var(--bad); border: 1px solid rgba(248, 113, 113, 0.25); }
+
+    /* Re-scout button */
+    .rescan-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      padding: 8px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .rescan-btn:hover { color: var(--text); border-color: var(--muted); }
+
+    /* Error state */
+    .error-state {
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.2);
+      border-radius: 6px;
+      padding: 14px;
+      font-size: 12px;
+      color: var(--bad);
+      line-height: 1.5;
+    }
+
+    .error-state strong { display: block; margin-bottom: 4px; }
+
+    /* Not on LinkedIn */
+    .not-linkedin {
+      text-align: center;
+      padding: 28px 16px;
+    }
+
+    .not-linkedin p {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .not-linkedin strong {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--accent);
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 14px 0;
+    }
+
+    /* Settings area */
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .settings-label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .settings-link {
+      font-size: 11px;
+      color: var(--accent);
+      cursor: pointer;
+      text-decoration: none;
+      font-family: 'DM Mono', monospace;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="logo">Job Scout <span>v1.0</span></div>
+  </div>
+
+  <div id="app"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
