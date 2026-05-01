@@ -98,7 +98,14 @@ function render() {
     case 'results':
       const r = state.results;
       const verdictClass = r.verdict === 'APPLY' ? 'apply' : r.verdict === 'CAUTION' ? 'caution' : 'pass';
-      const verdictEmoji = r.verdict === 'APPLY' ? '✅' : r.verdict === 'CAUTION' ? '⚠️' : '🚫';
+      const verdictLeading =
+        r.verdict === 'APPLY'
+          ? `<img class="verdict-icon-img" src="icons/verdict-apply.png" alt="" width="22" height="22" />`
+          : r.verdict === 'PASS'
+            ? `<img class="verdict-icon-img" src="icons/verdict-fail.png" alt="" width="22" height="22" />`
+            : r.verdict === 'CAUTION'
+              ? `<img class="verdict-icon-img" src="icons/verdict-caution.png" alt="" width="22" height="22" />`
+              : '⚠️';
 
       app.innerHTML = `
         <div class="company-bar">
@@ -106,7 +113,7 @@ function render() {
           ${state.jobTitle ? `<div class="job-title-small">${state.jobTitle}</div>` : ''}
         </div>
         <div class="content">
-          <div class="verdict ${verdictClass}">${verdictEmoji} ${r.verdict} — ${r.verdictReason}</div>
+          <div class="verdict ${verdictClass}">${verdictLeading} ${r.verdict} — ${r.verdictReason}</div>
 
           <div class="section">
             <div class="section-header">
