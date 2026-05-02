@@ -3,6 +3,7 @@
 const GEMINI_KEY_STORAGE = 'jobscout_gemini_key';
 const SERPER_KEY_STORAGE = 'jobscout_serper_key';
 const CACHE_STORAGE = 'jobscout_cache';
+const SCRAPE_DEBUG_KEY = 'jobscout_scrape_debug';
 
 const app = document.getElementById('app');
 
@@ -14,6 +15,7 @@ let state = {
   results: null,
   error: null,
   loadingStep: '',
+  scrapeDebugOn: false,
 };
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -74,11 +76,15 @@ function render() {
         </div>
         <div class="settings-row">
           <span class="settings-label">API keys saved ✓</span>
-          <span class="settings-link" id="reset-keys">Reset keys</span>
+          <span style="display:flex;gap:12px;align-items:center;flex-shrink:0">
+            <span class="settings-link" id="toggle-scrape-debug">Scrape logs: ${state.scrapeDebugOn ? 'On' : 'Off'}</span>
+            <span class="settings-link" id="reset-keys">Reset keys</span>
+          </span>
         </div>`;
 
       document.getElementById('scout-btn').addEventListener('click', runScout);
       document.getElementById('reset-keys').addEventListener('click', resetKeys);
+      document.getElementById('toggle-scrape-debug').addEventListener('click', toggleScrapeDebug);
       break;
 
     case 'loading':
@@ -176,11 +182,15 @@ function render() {
         </div>
         <div class="settings-row">
           <span class="settings-label">Job Scout</span>
-          <span class="settings-link" id="reset-keys">Reset keys</span>
+          <span style="display:flex;gap:12px;align-items:center;flex-shrink:0">
+            <span class="settings-link" id="toggle-scrape-debug">Scrape logs: ${state.scrapeDebugOn ? 'On' : 'Off'}</span>
+            <span class="settings-link" id="reset-keys">Reset keys</span>
+          </span>
         </div>`;
 
       document.getElementById('rescan-btn').addEventListener('click', () => runScout(true));
       document.getElementById('reset-keys').addEventListener('click', resetKeys);
+      document.getElementById('toggle-scrape-debug').addEventListener('click', toggleScrapeDebug);
       break;
 
     case 'error':
@@ -197,39 +207,79 @@ function render() {
   }
 }
 
+// ─── Scrape LinkedIn tab (runs in extension isolated world on that tab) ────────
+async function scrapeJobTab(tabId, scrapeDebugEnabled) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (enabled) => {
+      globalThis.__JOB_SCOUT_SCRAPE_DEBUG = enabled;
+    },
+    args: [scrapeDebugEnabled === true],
+  });
+  await chrome.scripting.executeScript({ target: { tabId }, files: ['scrape-job-data.js'] });
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () =>
+      typeof globalThis.jobScoutExtractJobData === 'function'
+        ? globalThis.jobScoutExtractJobData()
+        : { company: null, jobTitle: null, location: null },
+  });
+  return results[0]?.result || { company: null, jobTitle: null, location: null };
+}
+
+async function toggleScrapeDebug() {
+  state.scrapeDebugOn = !state.scrapeDebugOn;
+  await chrome.storage.local.set({ [SCRAPE_DEBUG_KEY]: state.scrapeDebugOn });
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id && tab.url?.includes('linkedin.com/jobs')) {
+      const jobData = await scrapeJobTab(tab.id, state.scrapeDebugOn);
+      if (state.scrapeDebugOn) {
+        console.log('[Job Scout · popup]', 'Scrape snapshot after toggle:', jobData);
+        console.info('[Job Scout · popup]', 'Detailed lines: LinkedIn tab → DevTools Console → filter [Job Scout · scrape]');
+      }
+      state.company = jobData.company || 'this company';
+      state.jobTitle = jobData.jobTitle;
+    }
+  } catch (e) {
+    console.warn('[Job Scout · popup]', e);
+  }
+  render();
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   render();
 
-  // Check if we're on LinkedIn
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const stored = await chrome.storage.local.get([
+    GEMINI_KEY_STORAGE,
+    SERPER_KEY_STORAGE,
+    SCRAPE_DEBUG_KEY,
+  ]);
+  state.scrapeDebugOn = stored[SCRAPE_DEBUG_KEY] === true;
+
   if (!tab.url || !tab.url.includes('linkedin.com/jobs')) {
     state.view = 'not-linkedin';
     render();
     return;
   }
 
-  // Scoped scraper lives in scrape-job-data.js — inject so popup always picks up updates without a LinkedIn reload.
   let jobData = { company: null, jobTitle: null, location: null };
   try {
-    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['scrape-job-data.js'] });
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () =>
-        typeof globalThis.jobScoutExtractJobData === 'function'
-          ? globalThis.jobScoutExtractJobData()
-          : { company: null, jobTitle: null, location: null },
-    });
-    jobData = results[0]?.result || jobData;
+    jobData = await scrapeJobTab(tab.id, state.scrapeDebugOn);
   } catch (e) {
-    console.warn('Scraping failed:', e);
+    console.warn('[Job Scout · popup]', 'Scraping failed:', e);
   }
 
   state.company = jobData.company || 'this company';
   state.jobTitle = jobData.jobTitle;
 
-  // Check for API keys
-  const stored = await chrome.storage.local.get([GEMINI_KEY_STORAGE, SERPER_KEY_STORAGE]);
+  if (state.scrapeDebugOn) {
+    console.log('[Job Scout · popup]', 'Scrape snapshot:', jobData);
+    console.info('[Job Scout · popup]', 'Details: DevTools Console on the LinkedIn tab — look for [Job Scout · scrape]');
+  }
+
   if (!stored[GEMINI_KEY_STORAGE] || !stored[SERPER_KEY_STORAGE]) {
     state.view = 'setup';
   } else {
@@ -294,6 +344,14 @@ async function runScout(skipCache = false) {
       `${state.company} glassdoor employee reviews culture`,
       `${state.company} company overview mission products`
     ];
+
+    if (state.scrapeDebugOn) {
+      console.log('[Job Scout · popup]', 'Scout queries (Gemini sees Serper snippets, not raw Google):', {
+        company: state.company,
+        jobTitle: state.jobTitle,
+        queries,
+      });
+    }
 
     setLoadingStep('Searching the web...');
     const searchResults = await Promise.all(
