@@ -396,6 +396,44 @@ async function serperSearch(query, apiKey) {
 }
 
 // ─── Gemini Synthesis ─────────────────────────────────────────────────────────
+/** Free-tier quota for `gemini-2.0-flash` is often `limit: 0`; prefer current Flash models. */
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+
+function parseRetryDelayMs(message) {
+  const m = /retry in ([\d.]+)s/i.exec(message || '');
+  if (!m) return null;
+  const sec = parseFloat(m[1], 10);
+  if (Number.isNaN(sec)) return null;
+  return Math.min(Math.ceil(sec * 1000) + 500, 120_000);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function geminiGenerateContentOnce(apiKey, model, generationBody) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model
+  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const doFetch = () =>
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(generationBody),
+    });
+
+  let res = await doFetch();
+  if (res.status === 429) {
+    const errJson = await res.json().catch(() => ({}));
+    const msg = errJson?.error?.message || '';
+    const waitMs = parseRetryDelayMs(msg);
+    if (waitMs) await sleep(waitMs);
+    res = await doFetch();
+  }
+  return res;
+}
+
 async function geminiSynthesize(company, jobTitle, searchSnippets, apiKey) {
   const prompt = `You are a job research analyst. A job seeker is considering applying to "${company}" for a "${jobTitle || 'software engineering'}" role. Based on the web search results below, create a concise but honest company brief.
 
@@ -416,34 +454,49 @@ Be honest and direct. If there's not enough info on a section, say so — don't 
 SEARCH RESULTS:
 ${searchSnippets}`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 1024 }
-      }),
+  const generationBody = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+  };
+
+  let lastStatus = 0;
+  let lastMessage = '';
+
+  for (let i = 0; i < GEMINI_MODELS.length; i++) {
+    const model = GEMINI_MODELS[i];
+    const res = await geminiGenerateContentOnce(apiKey, model, generationBody);
+    lastStatus = res.status;
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      lastMessage = data?.error?.message || res.statusText;
+      const tryNext =
+        (res.status === 404 || res.status === 429) && i < GEMINI_MODELS.length - 1;
+      if (tryNext) continue;
+
+      let extra = '';
+      if (res.status === 429) {
+        extra =
+          `\n\nIf this persists: your free-tier quota may be exhausted for today or for this model. Check https://ai.dev/rate-limit and billing at Google AI Studio. You can enable billing on the project for higher limits.`;
+      }
+
+      throw new Error(`Gemini ${res.status} (${model}) — ${lastMessage}${extra}`);
     }
+
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    const clean = raw.replace(/```json|```/g, '').trim();
+
+    try {
+      return JSON.parse(clean);
+    } catch {
+      throw new Error(`Gemini returned unexpected format (${model}). Try again.`);
+    }
+  }
+
+  throw new Error(
+    `Gemini ${lastStatus} — ${lastMessage || 'All models failed. Confirm your API key and quotas at AI Studio.'}`
   );
-
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(`Gemini error: ${res.status} — ${errData?.error?.message || 'check your Gemini API key'}`);
-  }
-
-  const data = await res.json();
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-  // Strip any accidental markdown fences
-  const clean = raw.replace(/```json|```/g, '').trim();
-
-  try {
-    return JSON.parse(clean);
-  } catch {
-    throw new Error('Gemini returned unexpected format. Try again.');
-  }
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
