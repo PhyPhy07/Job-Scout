@@ -209,37 +209,16 @@ async function init() {
     return;
   }
 
-  // Try to scrape job data
-  let jobData = { company: null, jobTitle: null };
+  // Scoped scraper lives in scrape-job-data.js — inject so popup always picks up updates without a LinkedIn reload.
+  let jobData = { company: null, jobTitle: null, location: null };
   try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['scrape-job-data.js'] });
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: () => {
-        const companySelectors = [
-          '.job-details-jobs-unified-top-card__company-name a',
-          '.job-details-jobs-unified-top-card__company-name',
-          '.jobs-unified-top-card__company-name a',
-          '.topcard__org-name-link',
-          '.topcard__org-name'
-        ];
-        const titleSelectors = [
-          '.job-details-jobs-unified-top-card__job-title h1',
-          '.jobs-unified-top-card__job-title h1',
-          '.topcard__title',
-          'h1.t-24'
-        ];
-
-        let company = null, jobTitle = null;
-        for (const s of companySelectors) {
-          const el = document.querySelector(s);
-          if (el?.textContent.trim()) { company = el.textContent.trim(); break; }
-        }
-        for (const s of titleSelectors) {
-          const el = document.querySelector(s);
-          if (el?.textContent.trim()) { jobTitle = el.textContent.trim(); break; }
-        }
-        return { company, jobTitle };
-      }
+      func: () =>
+        typeof globalThis.jobScoutExtractJobData === 'function'
+          ? globalThis.jobScoutExtractJobData()
+          : { company: null, jobTitle: null, location: null },
     });
     jobData = results[0]?.result || jobData;
   } catch (e) {
