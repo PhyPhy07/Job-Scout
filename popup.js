@@ -41,23 +41,18 @@ function render() {
           <div class="idle-state">
             <div class="idle-icon">🔑</div>
             <h2>Almost there</h2>
-            <p style="margin-bottom:16px">Add your API keys to get started. These are stored locally and never leave your browser.</p>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:10px">
-            <div>
-              <label style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);display:block;margin-bottom:4px">GEMINI API KEY</label>
-              <input id="gemini-key" type="password" placeholder="AIza..." style="width:100%;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;outline:none"/>
-            </div>
-            <div>
-              <label style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);display:block;margin-bottom:4px">SERPER API KEY</label>
-              <input id="serper-key" type="password" placeholder="..." style="width:100%;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;outline:none"/>
-            </div>
-            <button class="scout-btn" id="save-keys-btn">Save & Continue</button>
-            <p style="font-size:11px;color:var(--muted);text-align:center">Get keys: <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent)">Gemini</a> · <a href="https://serper.dev" target="_blank" style="color:var(--accent)">Serper</a></p>
+            <p style="margin-bottom:14px;color:var(--muted);font-size:12px;line-height:1.6">
+              The toolbar popup closes when you click elsewhere, so pasting two keys from other sites is awkward.
+              Open the <strong style="color:var(--text)">full setup tab</strong> instead — keep it open while you copy each key.
+            </p>
+            <button class="scout-btn" id="open-setup-page">Open API key setup (new tab)</button>
+            <p style="margin-top:14px;font-size:11px;color:var(--muted);text-align:center">
+              Or: Chrome menu → Extensions → Job Scout → <strong style="color:var(--text)">Details</strong> → <strong style="color:var(--text)">Extension options</strong>
+            </p>
           </div>
         </div>`;
 
-      document.getElementById('save-keys-btn').addEventListener('click', saveKeys);
+      document.getElementById('open-setup-page').addEventListener('click', openSetupPage);
       break;
 
     case 'idle':
@@ -76,7 +71,8 @@ function render() {
         </div>
         <div class="settings-row">
           <span class="settings-label">API keys saved ✓</span>
-          <span style="display:flex;gap:12px;align-items:center;flex-shrink:0">
+          <span style="display:flex;gap:12px;align-items:center;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+            <span class="settings-link" id="open-api-keys">API keys</span>
             <span class="settings-link" id="toggle-scrape-debug">Scrape logs: ${state.scrapeDebugOn ? 'On' : 'Off'}</span>
             <span class="settings-link" id="reset-keys">Reset keys</span>
           </span>
@@ -84,6 +80,7 @@ function render() {
 
       document.getElementById('scout-btn').addEventListener('click', runScout);
       document.getElementById('reset-keys').addEventListener('click', resetKeys);
+      document.getElementById('open-api-keys').addEventListener('click', openSetupPage);
       document.getElementById('toggle-scrape-debug').addEventListener('click', toggleScrapeDebug);
       break;
 
@@ -182,7 +179,8 @@ function render() {
         </div>
         <div class="settings-row">
           <span class="settings-label">Job Scout</span>
-          <span style="display:flex;gap:12px;align-items:center;flex-shrink:0">
+          <span style="display:flex;gap:12px;align-items:center;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+            <span class="settings-link" id="open-api-keys">API keys</span>
             <span class="settings-link" id="toggle-scrape-debug">Scrape logs: ${state.scrapeDebugOn ? 'On' : 'Off'}</span>
             <span class="settings-link" id="reset-keys">Reset keys</span>
           </span>
@@ -190,6 +188,7 @@ function render() {
 
       document.getElementById('rescan-btn').addEventListener('click', () => runScout(true));
       document.getElementById('reset-keys').addEventListener('click', resetKeys);
+      document.getElementById('open-api-keys').addEventListener('click', openSetupPage);
       document.getElementById('toggle-scrape-debug').addEventListener('click', toggleScrapeDebug);
       break;
 
@@ -289,23 +288,13 @@ async function init() {
   render();
 }
 
-// ─── Keys ─────────────────────────────────────────────────────────────────────
-async function saveKeys() {
-  const gemini = document.getElementById('gemini-key').value.trim();
-  const serper = document.getElementById('serper-key').value.trim();
-
-  if (!gemini || !serper) {
-    alert('Both keys are required.');
-    return;
-  }
-
-  await chrome.storage.local.set({
-    [GEMINI_KEY_STORAGE]: gemini,
-    [SERPER_KEY_STORAGE]: serper,
+// ─── Keys (full-page setup tab — popup cannot stay open while copying keys) ──
+function openSetupPage() {
+  chrome.runtime.openOptionsPage(() => {
+    if (chrome.runtime.lastError) {
+      console.warn('[Job Scout · popup]', chrome.runtime.lastError.message);
+    }
   });
-
-  state.view = 'idle';
-  render();
 }
 
 async function resetKeys() {
@@ -458,4 +447,15 @@ ${searchSnippets}`;
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
+(function syncVersionBadge() {
+  const el = document.getElementById('ext-version');
+  if (el) {
+    try {
+      el.textContent = 'v' + chrome.runtime.getManifest().version;
+    } catch (_) {
+      el.textContent = '';
+    }
+  }
+})();
+
 init();

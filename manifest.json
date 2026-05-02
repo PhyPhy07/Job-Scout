@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Job Scout",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Research any company from a LinkedIn job posting — the good, the bad, the ugly.",
   "icons": {
     "16": "icons/icon16.png",
@@ -14,6 +14,10 @@
     "https://generativelanguage.googleapis.com/*",
     "https://google.serper.dev/*"
   ],
+  "options_ui": {
+    "page": "setup.html",
+    "open_in_tab": true
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
